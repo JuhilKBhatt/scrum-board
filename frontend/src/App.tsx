@@ -7,7 +7,7 @@ import type { Ticket, ColumnType } from './types';
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 const COLUMNS: ColumnType[] = ['Backlog', 'In Progress', 'Review', 'Done'];
 
 function App() {
