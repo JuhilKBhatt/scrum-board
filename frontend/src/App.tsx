@@ -192,7 +192,7 @@ function App() {
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="task_name" label="Task Name" rules={[{ required: true, message: 'Please enter a task name' }]}>
