@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
+import { Button, Modal, Form, Input, Card, Layout, Typography, Tag, Popconfirm, message, Space } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined } from '@ant-design/icons';
 import './App.css';
 import type { Ticket, ColumnType } from './types';
+
+const { Header, Content } = Layout;
+const { Title, Text } = Typography;
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const COLUMNS: ColumnType[] = ['Backlog', 'In Progress', 'Review', 'Done'];
 
 function App() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTask, setNewTask] = useState({ task_name: '', task_owner: '', description: '' });
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  const [form] = Form.useForm();
 
   useEffect(() => {
     fetchTickets();
@@ -20,27 +26,57 @@ function App() {
       const data = await res.json();
       setTickets(data);
     } catch (err) {
-      console.error("Failed to fetch tickets", err);
+      message.error("Failed to fetch tickets");
     }
   };
 
-  const handleCreateTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTask.task_name) return;
+  const openCreateModal = () => {
+    setEditingTicket(null);
+    form.resetFields();
+    setIsModalVisible(true);
+  };
 
-    try {
-      const res = await fetch(`${API_URL}/tickets/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTask),
-      });
-      const data = await res.json();
-      setTickets([...tickets, data]);
-      setNewTask({ task_name: '', task_owner: '', description: '' });
-      setIsCreating(false);
-    } catch (err) {
-      console.error("Failed to create ticket", err);
+  const openEditModal = (ticket: Ticket) => {
+    setEditingTicket(ticket);
+    form.setFieldsValue({
+      task_name: ticket.task_name,
+      task_owner: ticket.task_owner,
+      description: ticket.description,
+    });
+    setIsModalVisible(true);
+  };
+
+  const handleSubmit = async (values: any) => {
+    if (editingTicket) {
+      // Update existing ticket
+      try {
+        const res = await fetch(`${API_URL}/tickets/${editingTicket.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const updatedTicket = await res.json();
+        setTickets(tickets.map(t => t.id === editingTicket.id ? updatedTicket : t));
+        message.success("Ticket updated!");
+      } catch (err) {
+        message.error("Failed to update ticket");
+      }
+    } else {
+      // Create new ticket
+      try {
+        const res = await fetch(`${API_URL}/tickets/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+        const data = await res.json();
+        setTickets([...tickets, data]);
+        message.success("Ticket created!");
+      } catch (err) {
+        message.error("Failed to create ticket");
+      }
     }
+    setIsModalVisible(false);
   };
 
   const handleStatusChange = async (ticketId: number, newStatus: string) => {
@@ -53,7 +89,7 @@ function App() {
       const updatedTicket = await res.json();
       setTickets(tickets.map(t => t.id === ticketId ? updatedTicket : t));
     } catch (err) {
-      console.error("Failed to update ticket", err);
+      message.error("Failed to update ticket status");
     }
   };
 
@@ -61,8 +97,9 @@ function App() {
     try {
       await fetch(`${API_URL}/tickets/${ticketId}`, { method: 'DELETE' });
       setTickets(tickets.filter(t => t.id !== ticketId));
+      message.success("Ticket deleted");
     } catch (err) {
-      console.error("Failed to delete ticket", err);
+      message.error("Failed to delete ticket");
     }
   };
 
@@ -72,7 +109,7 @@ function App() {
   };
 
   const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); // Necessary to allow dropping
+    e.preventDefault();
   };
 
   const onDrop = (e: React.DragEvent, status: string) => {
@@ -84,87 +121,98 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <header className="header">
-        <h1>Scrum Board</h1>
-        <button className="create-btn" onClick={() => setIsCreating(true)}>+ New Ticket</button>
-      </header>
+    <Layout style={{ height: '100vh', background: '#f0f2f5' }}>
+      <Header style={{ background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', zIndex: 1 }}>
+        <Title level={4} style={{ margin: 0 }}>Scrum Board</Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
+          New Ticket
+        </Button>
+      </Header>
 
-      {isCreating && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>Create New Ticket</h2>
-            <form onSubmit={handleCreateTicket}>
-              <div className="form-group">
-                <label>Task Name (Required):</label>
-                <input 
-                  type="text" 
-                  value={newTask.task_name} 
-                  onChange={e => setNewTask({...newTask, task_name: e.target.value})} 
-                  required 
-                />
-              </div>
-              <div className="form-group">
-                <label>Task Owner:</label>
-                <input 
-                  type="text" 
-                  value={newTask.task_owner} 
-                  onChange={e => setNewTask({...newTask, task_owner: e.target.value})} 
-                />
-              </div>
-              <div className="form-group">
-                <label>Description:</label>
-                <textarea 
-                  value={newTask.description} 
-                  onChange={e => setNewTask({...newTask, description: e.target.value})} 
-                  rows={3}
-                />
-              </div>
-              <div className="modal-actions">
-                <button type="button" onClick={() => setIsCreating(false)} className="cancel-btn">Cancel</button>
-                <button type="submit" className="save-btn">Save Ticket</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="board">
+      <Content style={{ padding: '24px', overflowX: 'auto', display: 'flex', gap: '24px' }}>
         {COLUMNS.map(column => (
           <div 
             key={column} 
-            className="column"
+            className="board-column"
             onDragOver={onDragOver}
             onDrop={(e) => onDrop(e, column)}
           >
             <div className="column-header">
-              <h2>{column}</h2>
-              <span className="ticket-count">
-                {tickets.filter(t => t.status === column).length}
-              </span>
+              <Text strong style={{ textTransform: 'uppercase', color: '#595959' }}>{column}</Text>
+              <Tag color="blue" style={{ margin: 0 }}>{tickets.filter(t => t.status === column).length}</Tag>
             </div>
             
             <div className="ticket-list">
               {tickets.filter(t => t.status === column).map(ticket => (
-                <div 
-                  key={ticket.id} 
+                <Card
+                  key={ticket.id}
+                  size="small"
                   className="ticket-card"
                   draggable
                   onDragStart={(e) => onDragStart(e, ticket.id)}
+                  title={ticket.task_name}
+                  extra={
+                    <Space size="small">
+                      <Button type="text" icon={<EditOutlined />} size="small" onClick={() => openEditModal(ticket)} />
+                      <Popconfirm
+                        title="Delete ticket"
+                        description="Are you sure you want to delete this ticket?"
+                        onConfirm={() => handleDelete(ticket.id)}
+                        okText="Yes"
+                        cancelText="No"
+                      >
+                        <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                      </Popconfirm>
+                    </Space>
+                  }
+                  style={{ marginBottom: 12, cursor: 'grab' }}
+                  headStyle={{ fontSize: '14px', borderBottom: '1px solid #f0f0f0' }}
                 >
-                  <div className="ticket-header">
-                    <h3>{ticket.task_name}</h3>
-                    <button onClick={() => handleDelete(ticket.id)} className="delete-btn" title="Delete Ticket">×</button>
-                  </div>
-                  {ticket.task_owner && <p className="ticket-owner"><strong>Owner:</strong> {ticket.task_owner}</p>}
-                  {ticket.description && <p className="ticket-desc">{ticket.description}</p>}
-                </div>
+                  {ticket.task_owner && (
+                    <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, color: '#595959' }}>
+                      <UserOutlined />
+                      <Text type="secondary" style={{ fontSize: 13 }}>{ticket.task_owner}</Text>
+                    </div>
+                  )}
+                  {ticket.description && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: '#595959', fontSize: 13 }}>
+                      <AlignLeftOutlined style={{ marginTop: 4 }} />
+                      <Text style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{ticket.description}</Text>
+                    </div>
+                  )}
+                </Card>
               ))}
             </div>
           </div>
         ))}
-      </div>
-    </div>
+      </Content>
+
+      <Modal
+        title={editingTicket ? "Edit Ticket" : "Create New Ticket"}
+        open={isModalVisible}
+        onCancel={() => setIsModalVisible(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+          <Form.Item name="task_name" label="Task Name" rules={[{ required: true, message: 'Please enter a task name' }]}>
+            <Input placeholder="E.g., Implement login page" />
+          </Form.Item>
+          <Form.Item name="task_owner" label="Task Owner">
+            <Input placeholder="E.g., John Doe" />
+          </Form.Item>
+          <Form.Item name="description" label="Description">
+            <Input.TextArea rows={4} placeholder="Add some details..." />
+          </Form.Item>
+          <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
+            <Button onClick={() => setIsModalVisible(false)} style={{ marginRight: 8 }}>Cancel</Button>
+            <Button type="primary" htmlType="submit">
+              {editingTicket ? "Save Changes" : "Create Ticket"}
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Layout>
   );
 }
 

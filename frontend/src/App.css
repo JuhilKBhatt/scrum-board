@@ -1,234 +1,57 @@
-* {
-  box-sizing: border-box;
+/* Custom CSS strictly for layout since Antd handles most styling now */
+
+body {
   margin: 0;
   padding: 0;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f4f5f7;
-  color: #172b4d;
+/* Custom Scrollbar for a cleaner look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-
-.app-container {
-  padding: 20px;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.create-btn {
-  background-color: #0052cc;
-  color: white;
-  border: none;
-  padding: 8px 16px;
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
   border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
-.create-btn:hover {
-  background-color: #0047b3;
-}
-
-/* Board Layout */
-.board {
-  display: flex;
-  gap: 20px;
-  flex: 1;
-  overflow-x: auto;
-  align-items: flex-start;
-}
-
-.column {
-  background-color: #ebecf0;
+.board-column {
+  background-color: #f5f5f5;
   border-radius: 8px;
   width: 300px;
   min-width: 300px;
   display: flex;
   flex-direction: column;
-  max-height: 100%;
+  max-height: calc(100vh - 120px);
 }
 
 .column-header {
-  padding: 12px;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.column-header h2 {
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #5e6c84;
-}
-
-.ticket-count {
-  background-color: #dfe1e6;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: #172b4d;
+  border-bottom: 2px solid #e8e8e8;
 }
 
 .ticket-list {
-  padding: 0 12px 12px 12px;
+  padding: 12px;
   overflow-y: auto;
   flex: 1;
-  min-height: 150px; /* target area for dropping */
-}
-
-/* Ticket Card */
-.ticket-card {
-  background-color: white;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 8px;
-  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.25);
-  cursor: grab;
-  position: relative;
+  min-height: 200px;
 }
 
 .ticket-card:active {
-  cursor: grabbing;
+  cursor: grabbing !important;
 }
 
 .ticket-card:hover {
-  background-color: #fafbfc;
-}
-
-.ticket-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-}
-
-.ticket-header h3 {
-  font-size: 14px;
-  font-weight: 500;
-  word-wrap: break-word;
-  padding-right: 20px;
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  color: #6b778c;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 4px;
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-
-.delete-btn:hover {
-  color: #de350b;
-}
-
-.ticket-owner {
-  font-size: 12px;
-  color: #5e6c84;
-  margin-bottom: 4px;
-}
-
-.ticket-desc {
-  font-size: 12px;
-  color: #172b4d;
-  white-space: pre-wrap;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(9, 30, 66, 0.54);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: white;
-  padding: 24px;
-  border-radius: 4px;
-  width: 100%;
-  max-width: 400px;
-}
-
-.modal h2 {
-  margin-bottom: 16px;
-  font-size: 20px;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: #5e6c84;
-}
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 8px;
-  border: 2px solid #dfe1e6;
-  border-radius: 4px;
-  font-family: inherit;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
-  border-color: #4c9aff;
-  outline: none;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 24px;
-}
-
-.cancel-btn {
-  background: none;
-  border: none;
-  padding: 8px 12px;
-  cursor: pointer;
-  color: #5e6c84;
-  font-weight: 500;
-}
-
-.cancel-btn:hover {
-  background-color: #ebecf0;
-  border-radius: 4px;
-}
-
-.save-btn {
-  background-color: #0052cc;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.save-btn:hover {
-  background-color: #0047b3;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-2px);
+  transition: all 0.2s ease;
 }
