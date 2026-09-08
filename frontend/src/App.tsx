@@ -29,7 +29,7 @@ function App() {
     const wsUrl = `${protocol}//${window.location.host}/api/ws`;
     
     let ws: WebSocket;
-    let reconnectInterval: NodeJS.Timeout;
+    let reconnectInterval: ReturnType<typeof setInterval>;
 
     const connect = () => {
       ws = new WebSocket(wsUrl);
