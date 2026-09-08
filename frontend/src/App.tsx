@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Button, Modal, Form, Input, Card, Layout, Typography, Tag, Popconfirm, message, Space } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined } from '@ant-design/icons';
+import { Button, Modal, Form, Input, Card, Layout, Typography, Tag, Popconfirm, message, Space, Dropdown, List } from 'antd';
+import type { MenuProps } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined, InboxOutlined, ClockCircleOutlined, MoreOutlined, UndoOutlined } from '@ant-design/icons';
 import './App.css';
 import type { Ticket, ColumnType } from './types';
 
@@ -13,11 +14,66 @@ const COLUMNS: ColumnType[] = ['Backlog', 'In Progress', 'Review', 'Done'];
 function App() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isArchiveModalVisible, setIsArchiveModalVisible] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [form] = Form.useForm();
 
+  // Fetch initial tickets
   useEffect(() => {
     fetchTickets();
+  }, []);
+
+  // Set up Live WebSocket Updates
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+    
+    let ws: WebSocket;
+    let reconnectInterval: NodeJS.Timeout;
+
+    const connect = () => {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('Connected to Live Updates WebSocket');
+        clearInterval(reconnectInterval);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const action = data.action;
+        const incomingTicket: Ticket = data.ticket;
+
+        setTickets((prev) => {
+          if (action === 'CREATE') {
+            if (prev.find(t => t.id === incomingTicket.id)) return prev;
+            return [...prev, incomingTicket];
+          } 
+          else if (action === 'UPDATE') {
+            return prev.map(t => t.id === incomingTicket.id ? incomingTicket : t);
+          } 
+          else if (action === 'DELETE') {
+            return prev.filter(t => t.id !== incomingTicket.id);
+          }
+          return prev;
+        });
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected. Reconnecting...');
+        reconnectInterval = setInterval(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearInterval(reconnectInterval);
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect loop in StrictMode
+        ws.close();
+      }
+    };
   }, []);
 
   const fetchTickets = async () => {
@@ -48,29 +104,23 @@ function App() {
 
   const handleSubmit = async (values: any) => {
     if (editingTicket) {
-      // Update existing ticket
       try {
-        const res = await fetch(`${API_URL}/tickets/${editingTicket.id}`, {
+        await fetch(`${API_URL}/tickets/${editingTicket.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(values),
         });
-        const updatedTicket = await res.json();
-        setTickets(tickets.map(t => t.id === editingTicket.id ? updatedTicket : t));
         message.success("Ticket updated!");
       } catch (err) {
         message.error("Failed to update ticket");
       }
     } else {
-      // Create new ticket
       try {
-        const res = await fetch(`${API_URL}/tickets/`, {
+        await fetch(`${API_URL}/tickets/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(values),
         });
-        const data = await res.json();
-        setTickets([...tickets, data]);
         message.success("Ticket created!");
       } catch (err) {
         message.error("Failed to create ticket");
@@ -81,29 +131,38 @@ function App() {
 
   const handleStatusChange = async (ticketId: number, newStatus: string) => {
     try {
-      const res = await fetch(`${API_URL}/tickets/${ticketId}`, {
+      await fetch(`${API_URL}/tickets/${ticketId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      const updatedTicket = await res.json();
-      setTickets(tickets.map(t => t.id === ticketId ? updatedTicket : t));
     } catch (err) {
       message.error("Failed to update ticket status");
+    }
+  };
+
+  const handleArchiveToggle = async (ticketId: number, isArchived: boolean) => {
+    try {
+      await fetch(`${API_URL}/tickets/${ticketId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_archived: isArchived }),
+      });
+      message.success(isArchived ? "Ticket archived" : "Ticket restored");
+    } catch (err) {
+      message.error("Failed to update archive status");
     }
   };
 
   const handleDelete = async (ticketId: number) => {
     try {
       await fetch(`${API_URL}/tickets/${ticketId}`, { method: 'DELETE' });
-      setTickets(tickets.filter(t => t.id !== ticketId));
-      message.success("Ticket deleted");
+      message.success("Ticket permanently deleted");
     } catch (err) {
       message.error("Failed to delete ticket");
     }
   };
 
-  // HTML5 Drag and Drop Handlers
   const onDragStart = (e: React.DragEvent, ticketId: number) => {
     e.dataTransfer.setData("ticketId", ticketId.toString());
   };
@@ -120,13 +179,37 @@ function App() {
     }
   };
 
+  const formatDate = (dateString: string) => {
+    const d = new Date(dateString);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const activeTickets = tickets.filter(t => !t.is_archived);
+  const archivedTickets = tickets.filter(t => t.is_archived);
+
+  // Helper to generate the "Move To" menu for mobile/click users
+  const getMoveMenu = (ticketId: number): MenuProps => {
+    return {
+      items: COLUMNS.map(col => ({
+        key: col,
+        label: `Move to ${col}`,
+        onClick: () => handleStatusChange(ticketId, col)
+      }))
+    };
+  };
+
   return (
     <Layout style={{ height: '100vh', background: '#f0f2f5' }}>
       <Header style={{ background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', zIndex: 1 }}>
         <Title level={4} style={{ margin: 0 }}>Scrum Board</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
-          New Ticket
-        </Button>
+        <Space>
+          <Button icon={<InboxOutlined />} onClick={() => setIsArchiveModalVisible(true)}>
+            View Archives ({archivedTickets.length})
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
+            New Ticket
+          </Button>
+        </Space>
       </Header>
 
       <Content style={{ padding: '24px', overflowX: 'auto', display: 'flex', gap: '24px' }}>
@@ -139,11 +222,11 @@ function App() {
           >
             <div className="column-header">
               <Text strong style={{ textTransform: 'uppercase', color: '#595959' }}>{column}</Text>
-              <Tag color="blue" style={{ margin: 0 }}>{tickets.filter(t => t.status === column).length}</Tag>
+              <Tag color="blue" style={{ margin: 0 }}>{activeTickets.filter(t => t.status === column).length}</Tag>
             </div>
             
             <div className="ticket-list">
-              {tickets.filter(t => t.status === column).map(ticket => (
+              {activeTickets.filter(t => t.status === column).map(ticket => (
                 <Card
                   key={ticket.id}
                   size="small"
@@ -153,20 +236,23 @@ function App() {
                   title={ticket.task_name}
                   extra={
                     <Space size="small">
-                      <Button type="text" icon={<EditOutlined />} size="small" onClick={() => openEditModal(ticket)} />
+                      <Dropdown menu={getMoveMenu(ticket.id)} trigger={['click']}>
+                        <Button type="text" icon={<MoreOutlined />} size="small" title="Move Ticket" />
+                      </Dropdown>
+                      <Button type="text" icon={<EditOutlined />} size="small" onClick={() => openEditModal(ticket)} title="Edit Ticket" />
                       <Popconfirm
-                        title="Delete ticket"
-                        description="Are you sure you want to delete this ticket?"
-                        onConfirm={() => handleDelete(ticket.id)}
+                        title="Archive ticket"
+                        description="Move this ticket to the archive?"
+                        onConfirm={() => handleArchiveToggle(ticket.id, true)}
                         okText="Yes"
                         cancelText="No"
                       >
-                        <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                        <Button type="text" icon={<InboxOutlined />} size="small" title="Archive Ticket" />
                       </Popconfirm>
                     </Space>
                   }
                   style={{ marginBottom: 12, cursor: 'grab' }}
-                  headStyle={{ fontSize: '14px', borderBottom: '1px solid #f0f0f0' }}
+                  styles={{ header: { fontSize: '14px', borderBottom: '1px solid #f0f0f0' } }}
                 >
                   {ticket.task_owner && (
                     <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, color: '#595959' }}>
@@ -175,11 +261,18 @@ function App() {
                     </div>
                   )}
                   {ticket.description && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: '#595959', fontSize: 13 }}>
+                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 6, color: '#595959', fontSize: 13 }}>
                       <AlignLeftOutlined style={{ marginTop: 4 }} />
                       <Text style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{ticket.description}</Text>
                     </div>
                   )}
+                  
+                  <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px dashed #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      <ClockCircleOutlined style={{ marginRight: 4 }} />
+                      Updated: {formatDate(ticket.updated_at)}
+                    </Text>
+                  </div>
                 </Card>
               ))}
             </div>
@@ -187,6 +280,7 @@ function App() {
         ))}
       </Content>
 
+      {/* CREATE / EDIT MODAL */}
       <Modal
         title={editingTicket ? "Edit Ticket" : "Create New Ticket"}
         open={isModalVisible}
@@ -211,6 +305,44 @@ function App() {
             </Button>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* ARCHIVE MODAL */}
+      <Modal
+        title="Archived Tickets"
+        open={isArchiveModalVisible}
+        onCancel={() => setIsArchiveModalVisible(false)}
+        footer={null}
+        width={600}
+        destroyOnHidden
+      >
+        {archivedTickets.length === 0 ? (
+          <Text type="secondary">No archived tickets.</Text>
+        ) : (
+          <List
+            itemLayout="horizontal"
+            dataSource={archivedTickets}
+            renderItem={ticket => (
+              <List.Item
+                actions={[
+                  <Button key="restore" type="link" icon={<UndoOutlined />} onClick={() => handleArchiveToggle(ticket.id, false)}>Restore</Button>,
+                  <Popconfirm
+                    key="delete"
+                    title="Delete permanently"
+                    onConfirm={() => handleDelete(ticket.id)}
+                  >
+                    <Button type="link" danger icon={<DeleteOutlined />}>Delete</Button>
+                  </Popconfirm>
+                ]}
+              >
+                <List.Item.Meta
+                  title={ticket.task_name}
+                  description={`Status before archiving: ${ticket.status} | Updated: ${formatDate(ticket.updated_at)}`}
+                />
+              </List.Item>
+            )}
+          />
+        )}
       </Modal>
     </Layout>
   );
