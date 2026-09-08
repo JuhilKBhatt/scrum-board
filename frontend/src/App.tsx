@@ -201,7 +201,7 @@ function App() {
   return (
     <Layout style={{ height: '100vh', background: '#f0f2f5' }}>
       <Header style={{ background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', zIndex: 1 }}>
-        <Title level={4} style={{ margin: 0 }}>Scrum Board</Title>
+        <Title level={4} style={{ margin: 0 }}>AJBCC Task Board</Title>
         <Space>
           <Button icon={<InboxOutlined />} onClick={() => setIsArchiveModalVisible(true)}>
             View Archives ({archivedTickets.length})
