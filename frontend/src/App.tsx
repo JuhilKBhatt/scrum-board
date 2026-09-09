@@ -180,8 +180,16 @@ function App() {
   };
 
   const formatDate = (dateString: string) => {
-    const d = new Date(dateString);
-    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    // Append 'Z' to treat the naive backend timestamp as UTC explicitly
+    const utcDateString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+    const d = new Date(utcDateString);
+    return d.toLocaleString('en-AU', { 
+      timeZone: 'Australia/Sydney',
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
   };
 
   const activeTickets = tickets.filter(t => !t.is_archived);
