@@ -4,6 +4,7 @@ export interface Ticket {
   task_owner: string | null;
   description: string | null;
   status: string;
+  priority: 'L' | 'M' | 'H';
   is_archived: boolean;
   created_at: string;
   updated_at: string;

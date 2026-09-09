@@ -10,6 +10,7 @@ class Ticket(Base):
     task_owner = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     status = Column(String, default="Backlog", nullable=False)
+    priority = Column(String(1), default="M", nullable=False)
     is_archived = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

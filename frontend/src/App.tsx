@@ -1,15 +1,35 @@
 import { useState, useEffect } from 'react';
-import { Button, Modal, Form, Input, Card, Layout, Typography, Tag, Popconfirm, message, Space, Dropdown, List } from 'antd';
+import { Button, Modal, Form, Input, Card, Layout, Typography, Tag, Popconfirm, message, Space, Dropdown, List, Select } from 'antd';
 import type { MenuProps } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined, InboxOutlined, ClockCircleOutlined, MoreOutlined, UndoOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined, InboxOutlined, ClockCircleOutlined, MoreOutlined, UndoOutlined, FireOutlined } from '@ant-design/icons';
 import './App.css';
 import type { Ticket, ColumnType } from './types';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
+const { Option } = Select;
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const COLUMNS: ColumnType[] = ['Backlog', 'In Progress', 'Review', 'Done'];
+
+const COLUMN_COLORS: Record<ColumnType, string> = {
+  'Backlog': '#f0f5ff',     // Light Blue
+  'In Progress': '#fffbe6', // Light Yellow/Orange
+  'Review': '#f9f0ff',      // Light Purple
+  'Done': '#f6ffed'         // Light Green
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  'H': '#ff4d4f', // Red
+  'M': '#faad14', // Orange
+  'L': '#52c41a'  // Green
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  'H': 'High',
+  'M': 'Medium',
+  'L': 'Low'
+};
 
 function App() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -89,6 +109,7 @@ function App() {
   const openCreateModal = () => {
     setEditingTicket(null);
     form.resetFields();
+    form.setFieldsValue({ priority: 'M' }); // Default to Medium
     setIsModalVisible(true);
   };
 
@@ -98,6 +119,7 @@ function App() {
       task_name: ticket.task_name,
       task_owner: ticket.task_owner,
       description: ticket.description,
+      priority: ticket.priority,
     });
     setIsModalVisible(true);
   };
@@ -180,6 +202,7 @@ function App() {
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return '';
     // Append 'Z' to treat the naive backend timestamp as UTC explicitly
     const utcDateString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
     const d = new Date(utcDateString);
@@ -207,12 +230,12 @@ function App() {
   };
 
   return (
-    <Layout style={{ height: '100vh', background: '#f0f2f5' }}>
+    <Layout style={{ height: '100vh', background: '#f5f5f5' }}>
       <Header style={{ background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', zIndex: 1 }}>
-        <Title level={4} style={{ margin: 0 }}>AJBCC Task Board</Title>
+        <Title level={4} style={{ margin: 0, color: '#1890ff' }}>AJBCC Task Board</Title>
         <Space>
           <Button icon={<InboxOutlined />} onClick={() => setIsArchiveModalVisible(true)}>
-            View Archives ({archivedTickets.length})
+            Archives ({archivedTickets.length})
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
             New Ticket
@@ -220,15 +243,16 @@ function App() {
         </Space>
       </Header>
 
-      <Content style={{ padding: '24px', overflowX: 'auto', display: 'flex', gap: '24px' }}>
+      <Content style={{ padding: '24px', overflowX: 'auto', display: 'flex', gap: '24px', justifyContent: 'center' }}>
         {COLUMNS.map(column => (
           <div 
             key={column} 
             className="board-column"
+            style={{ backgroundColor: COLUMN_COLORS[column], border: `1px solid ${COLUMN_COLORS[column]}`, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
             onDragOver={onDragOver}
             onDrop={(e) => onDrop(e, column)}
           >
-            <div className="column-header">
+            <div className="column-header" style={{ borderBottomColor: '#d9d9d9' }}>
               <Text strong style={{ textTransform: 'uppercase', color: '#595959' }}>{column}</Text>
               <Tag color="blue" style={{ margin: 0 }}>{activeTickets.filter(t => t.status === column).length}</Tag>
             </div>
@@ -241,7 +265,14 @@ function App() {
                   className="ticket-card"
                   draggable
                   onDragStart={(e) => onDragStart(e, ticket.id)}
-                  title={ticket.task_name}
+                  title={
+                    <Space align="center" style={{ width: '100%' }}>
+                      <Tag color={PRIORITY_COLORS[ticket.priority || 'M']} style={{ margin: 0, borderRadius: '10px' }}>
+                        {ticket.priority || 'M'}
+                      </Tag>
+                      <Text strong style={{ fontSize: 14 }}>{ticket.task_name}</Text>
+                    </Space>
+                  }
                   extra={
                     <Space size="small">
                       <Dropdown menu={getMoveMenu(ticket.id)} trigger={['click']}>
@@ -259,8 +290,8 @@ function App() {
                       </Popconfirm>
                     </Space>
                   }
-                  style={{ marginBottom: 12, cursor: 'grab' }}
-                  styles={{ header: { fontSize: '14px', borderBottom: '1px solid #f0f0f0' } }}
+                  style={{ marginBottom: 12, cursor: 'grab', borderLeft: `4px solid ${PRIORITY_COLORS[ticket.priority || 'M']}` }}
+                  styles={{ header: { borderBottom: '1px solid #f0f0f0', padding: '0 12px' }, body: { padding: '12px' } }}
                 >
                   {ticket.task_owner && (
                     <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, color: '#595959' }}>
@@ -300,12 +331,25 @@ function App() {
           <Form.Item name="task_name" label="Task Name" rules={[{ required: true, message: 'Please enter a task name' }]}>
             <Input placeholder="E.g., Implement login page" />
           </Form.Item>
-          <Form.Item name="task_owner" label="Task Owner">
-            <Input placeholder="E.g., John Doe" />
-          </Form.Item>
+          
+          <Space size="large" style={{ display: 'flex', width: '100%' }}>
+            <Form.Item name="priority" label="Priority" style={{ width: '120px' }}>
+              <Select>
+                <Option value="H"><Tag color={PRIORITY_COLORS['H']}>High</Tag></Option>
+                <Option value="M"><Tag color={PRIORITY_COLORS['M']}>Medium</Tag></Option>
+                <Option value="L"><Tag color={PRIORITY_COLORS['L']}>Low</Tag></Option>
+              </Select>
+            </Form.Item>
+            
+            <Form.Item name="task_owner" label="Task Owner" style={{ flex: 1 }}>
+              <Input placeholder="E.g., John Doe" />
+            </Form.Item>
+          </Space>
+
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={4} placeholder="Add some details..." />
           </Form.Item>
+          
           <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
             <Button onClick={() => setIsModalVisible(false)} style={{ marginRight: 8 }}>Cancel</Button>
             <Button type="primary" htmlType="submit">
@@ -344,7 +388,12 @@ function App() {
                 ]}
               >
                 <List.Item.Meta
-                  title={ticket.task_name}
+                  title={
+                    <Space>
+                      <Tag color={PRIORITY_COLORS[ticket.priority || 'M']}>{ticket.priority || 'M'}</Tag>
+                      {ticket.task_name}
+                    </Space>
+                  }
                   description={`Status before archiving: ${ticket.status} | Updated: ${formatDate(ticket.updated_at)}`}
                 />
               </List.Item>

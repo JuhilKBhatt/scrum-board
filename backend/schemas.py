@@ -7,6 +7,7 @@ class TicketBase(BaseModel):
     task_owner: Optional[str] = None
     description: Optional[str] = None
     status: str = "Backlog"
+    priority: str = "M"
     is_archived: bool = False
 
 class TicketCreate(TicketBase):
@@ -17,6 +18,7 @@ class TicketUpdate(BaseModel):
     task_owner: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
+    priority: Optional[str] = None
     is_archived: Optional[bool] = None
 
 class TicketResponse(TicketBase):
