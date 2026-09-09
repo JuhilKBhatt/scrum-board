@@ -2,10 +2,15 @@ from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from typing import List
 import os
 import json
+import jwt
+import hmac
+import datetime
 
 from database import engine, get_db, Base
 import models
@@ -24,6 +29,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==========================================
+# AUTHENTICATION
+# ==========================================
+SECRET_KEY = os.getenv("SECRET_KEY")
+BOARD_PASSWORD = os.getenv("BOARD_PASSWORD")
+ALGORITHM = "HS256"
+
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+async def verify_ws_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.PyJWTError:
+        raise WebSocketDisconnect()
+
+class LoginRequest(BaseModel):
+    password: str
+
+@app.post("/api/login")
+def login(request: LoginRequest):
+    # Constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(request.password, BOARD_PASSWORD):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+    
+    expire = datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+    token = jwt.encode({"exp": expire, "sub": "board_user"}, SECRET_KEY, algorithm=ALGORITHM)
+    return {"token": token}
+
+
+# ==========================================
+# WEBSOCKET MANAGER
+# ==========================================
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -47,7 +92,14 @@ manager = ConnectionManager()
 # ==========================================
 
 @app.websocket("/api/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    # Manually verify token for WebSockets since they don't support custom headers well
+    try:
+        await verify_ws_token(token)
+    except WebSocketDisconnect:
+        await websocket.close(code=1008)
+        return
+        
     await manager.connect(websocket)
     try:
         while True:
@@ -65,7 +117,7 @@ def health_check():
     return {"status": "ok"}
 
 @app.post("/api/tickets/", response_model=schemas.TicketResponse)
-async def create_ticket(ticket: schemas.TicketCreate, db: Session = Depends(get_db)):
+async def create_ticket(ticket: schemas.TicketCreate, db: Session = Depends(get_db), auth: dict = Depends(verify_token)):
     db_ticket = models.Ticket(**ticket.model_dump())
     db.add(db_ticket)
     db.commit()
@@ -74,11 +126,11 @@ async def create_ticket(ticket: schemas.TicketCreate, db: Session = Depends(get_
     return db_ticket
 
 @app.get("/api/tickets/", response_model=List[schemas.TicketResponse])
-def get_tickets(db: Session = Depends(get_db)):
+def get_tickets(db: Session = Depends(get_db), auth: dict = Depends(verify_token)):
     return db.query(models.Ticket).all()
 
 @app.put("/api/tickets/{ticket_id}", response_model=schemas.TicketResponse)
-async def update_ticket(ticket_id: int, ticket_update: schemas.TicketUpdate, db: Session = Depends(get_db)):
+async def update_ticket(ticket_id: int, ticket_update: schemas.TicketUpdate, db: Session = Depends(get_db), auth: dict = Depends(verify_token)):
     db_ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
     if not db_ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -93,7 +145,7 @@ async def update_ticket(ticket_id: int, ticket_update: schemas.TicketUpdate, db:
     return db_ticket
 
 @app.delete("/api/tickets/{ticket_id}")
-async def delete_ticket(ticket_id: int, db: Session = Depends(get_db)):
+async def delete_ticket(ticket_id: int, db: Session = Depends(get_db), auth: dict = Depends(verify_token)):
     db_ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
     if not db_ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -108,20 +160,15 @@ async def delete_ticket(ticket_id: int, db: Session = Depends(get_db)):
 # STATIC FILES (React Frontend)
 # ==========================================
 
-# Only mount static files if the directory exists (which it will in the production Docker image)
 if os.path.isdir("static"):
     app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
 
-    # Catch-all route to serve the React index.html
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
-        # Ignore API routes
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="API route not found")
         
-        # Serve requested file if it exists (e.g. favicon, vite.svg)
         if full_path and os.path.isfile(f"static/{full_path}"):
             return FileResponse(f"static/{full_path}")
             
-        # Fallback to index.html for client-side routing
         return FileResponse("static/index.html")

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button, Modal, Form, Input, Card, Layout, Typography, Tag, Popconfirm, message, Space, Dropdown, List, Select } from 'antd';
 import type { MenuProps } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined, InboxOutlined, ClockCircleOutlined, MoreOutlined, UndoOutlined, FireOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, UserOutlined, AlignLeftOutlined, InboxOutlined, ClockCircleOutlined, MoreOutlined, UndoOutlined, LockOutlined } from '@ant-design/icons';
 import './App.css';
 import type { Ticket, ColumnType } from './types';
 
@@ -13,40 +13,83 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
 const COLUMNS: ColumnType[] = ['Backlog', 'In Progress', 'Review', 'Done'];
 
 const COLUMN_COLORS: Record<ColumnType, string> = {
-  'Backlog': '#f0f5ff',     // Light Blue
-  'In Progress': '#fffbe6', // Light Yellow/Orange
-  'Review': '#f9f0ff',      // Light Purple
-  'Done': '#f6ffed'         // Light Green
+  'Backlog': '#f0f5ff',
+  'In Progress': '#fffbe6',
+  'Review': '#f9f0ff',
+  'Done': '#f6ffed'
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  'H': '#ff4d4f', // Red
-  'M': '#faad14', // Orange
-  'L': '#52c41a'  // Green
-};
-
-const PRIORITY_LABELS: Record<string, string> = {
-  'H': 'High',
-  'M': 'Medium',
-  'L': 'Low'
+  'H': '#ff4d4f',
+  'M': '#faad14',
+  'L': '#52c41a'
 };
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('board_token'));
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isArchiveModalVisible, setIsArchiveModalVisible] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  
   const [form] = Form.useForm();
+  const [loginForm] = Form.useForm();
 
-  // Fetch initial tickets
-  useEffect(() => {
-    fetchTickets();
-  }, []);
+  // Helper for authenticated requests
+  const authFetch = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('board_token');
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`
+    };
+    
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      handleLogout();
+      throw new Error("Unauthorized");
+    }
+    return res;
+  };
 
-  // Set up Live WebSocket Updates
+  const handleLogout = () => {
+    localStorage.removeItem('board_token');
+    setIsAuthenticated(false);
+    setTickets([]);
+  };
+
+  const handleLogin = async (values: any) => {
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('board_token', data.token);
+        setIsAuthenticated(true);
+        message.success("Logged in securely");
+      } else {
+        message.error("Incorrect password");
+      }
+    } catch (err) {
+      message.error("Login failed");
+    }
+  };
+
   useEffect(() => {
+    if (isAuthenticated) {
+      fetchTickets();
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+    const token = localStorage.getItem('board_token');
+    const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${token}`;
     
     let ws: WebSocket;
     let reconnectInterval: ReturnType<typeof setInterval>;
@@ -79,9 +122,14 @@ function App() {
         });
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected. Reconnecting...');
-        reconnectInterval = setInterval(connect, 3000);
+      ws.onclose = (event) => {
+        console.log('WebSocket disconnected');
+        if (event.code === 1008) {
+          // Token invalid
+          handleLogout();
+        } else {
+          reconnectInterval = setInterval(connect, 3000);
+        }
       };
     };
 
@@ -90,26 +138,26 @@ function App() {
     return () => {
       clearInterval(reconnectInterval);
       if (ws) {
-        ws.onclose = null; // Prevent reconnect loop in StrictMode
+        ws.onclose = null;
         ws.close();
       }
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch(`${API_URL}/tickets/`);
+      const res = await authFetch(`${API_URL}/tickets/`);
       const data = await res.json();
       setTickets(data);
     } catch (err) {
-      message.error("Failed to fetch tickets");
+      console.error(err);
     }
   };
 
   const openCreateModal = () => {
     setEditingTicket(null);
     form.resetFields();
-    form.setFieldsValue({ priority: 'M' }); // Default to Medium
+    form.setFieldsValue({ priority: 'M' });
     setIsModalVisible(true);
   };
 
@@ -127,7 +175,7 @@ function App() {
   const handleSubmit = async (values: any) => {
     if (editingTicket) {
       try {
-        await fetch(`${API_URL}/tickets/${editingTicket.id}`, {
+        await authFetch(`${API_URL}/tickets/${editingTicket.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(values),
@@ -138,7 +186,7 @@ function App() {
       }
     } else {
       try {
-        await fetch(`${API_URL}/tickets/`, {
+        await authFetch(`${API_URL}/tickets/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(values),
@@ -153,7 +201,7 @@ function App() {
 
   const handleStatusChange = async (ticketId: number, newStatus: string) => {
     try {
-      await fetch(`${API_URL}/tickets/${ticketId}`, {
+      await authFetch(`${API_URL}/tickets/${ticketId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -165,7 +213,7 @@ function App() {
 
   const handleArchiveToggle = async (ticketId: number, isArchived: boolean) => {
     try {
-      await fetch(`${API_URL}/tickets/${ticketId}`, {
+      await authFetch(`${API_URL}/tickets/${ticketId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_archived: isArchived }),
@@ -178,7 +226,7 @@ function App() {
 
   const handleDelete = async (ticketId: number) => {
     try {
-      await fetch(`${API_URL}/tickets/${ticketId}`, { method: 'DELETE' });
+      await authFetch(`${API_URL}/tickets/${ticketId}`, { method: 'DELETE' });
       message.success("Ticket permanently deleted");
     } catch (err) {
       message.error("Failed to delete ticket");
@@ -203,7 +251,6 @@ function App() {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    // Append 'Z' to treat the naive backend timestamp as UTC explicitly
     const utcDateString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
     const d = new Date(utcDateString);
     return d.toLocaleString(undefined, { 
@@ -214,10 +261,31 @@ function App() {
     });
   };
 
+  if (!isAuthenticated) {
+    return (
+      <Layout style={{ height: '100vh', justifyContent: 'center', alignItems: 'center', background: '#f5f5f5' }}>
+        <Card style={{ width: 350, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <LockOutlined style={{ fontSize: 32, color: '#1890ff', marginBottom: 8 }} />
+            <Title level={4} style={{ margin: 0 }}>Secure Board Access</Title>
+            <Text type="secondary">Enter the team password to continue</Text>
+          </div>
+          <Form form={loginForm} onFinish={handleLogin} layout="vertical">
+            <Form.Item name="password" rules={[{ required: true, message: 'Password is required' }]}>
+              <Input.Password placeholder="Enter Password" size="large" />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" size="large" block>
+              Unlock Board
+            </Button>
+          </Form>
+        </Card>
+      </Layout>
+    );
+  }
+
   const activeTickets = tickets.filter(t => !t.is_archived);
   const archivedTickets = tickets.filter(t => t.is_archived);
 
-  // Helper to generate the "Move To" menu for mobile/click users
   const getMoveMenu = (ticketId: number): MenuProps => {
     return {
       items: COLUMNS.map(col => ({
@@ -231,7 +299,7 @@ function App() {
   return (
     <Layout style={{ height: '100vh', background: '#f5f5f5' }}>
       <Header style={{ background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', zIndex: 1 }}>
-        <Title level={4} style={{ margin: 0, color: '#1890ff' }}>AJBCC Task Board</Title>
+        <Title level={4} style={{ margin: 0, color: '#1890ff' }}>Scrum Board</Title>
         <Space>
           <Button icon={<InboxOutlined />} onClick={() => setIsArchiveModalVisible(true)}>
             Archives ({archivedTickets.length})
@@ -239,6 +307,7 @@ function App() {
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
             New Ticket
           </Button>
+          <Button type="text" onClick={handleLogout}>Logout</Button>
         </Space>
       </Header>
 
@@ -318,7 +387,6 @@ function App() {
         ))}
       </Content>
 
-      {/* CREATE / EDIT MODAL */}
       <Modal
         title={editingTicket ? "Edit Ticket" : "Create New Ticket"}
         open={isModalVisible}
@@ -358,7 +426,6 @@ function App() {
         </Form>
       </Modal>
 
-      {/* ARCHIVE MODAL */}
       <Modal
         title="Archived Tickets"
         open={isArchiveModalVisible}
