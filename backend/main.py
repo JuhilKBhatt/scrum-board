@@ -19,6 +19,22 @@ import schemas
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
+# Auto-migrate remote databases that were created before the new columns were added
+from sqlalchemy import text
+with engine.begin() as conn:
+    # We use engine.begin() which auto-commits. We ignore errors if columns already exist.
+    statements = [
+        "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;",
+        "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;",
+        "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority VARCHAR(1) DEFAULT 'M';"
+    ]
+    for stmt in statements:
+        try:
+            conn.execute(text(stmt))
+        except Exception as e:
+            pass # Fails safely if column exists or dialect doesn't support IF NOT EXISTS
+
 app = FastAPI(title="Scrum Board API")
 
 app.add_middleware(
