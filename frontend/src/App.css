@@ -55,3 +55,40 @@ body {
   transform: translateY(-2px);
   transition: all 0.2s ease;
 }
+
+.board-wrapper {
+  padding: 24px;
+  overflow-x: auto;
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Tablet / Laptop: Keep horizontal but allow left-scrolling without clipping */
+@media (max-width: 1300px) {
+  .board-wrapper {
+    justify-content: flex-start;
+  }
+}
+
+/* Mobile Phones: Stack columns vertically for natural scrolling */
+@media (max-width: 768px) {
+  .board-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+    gap: 16px;
+  }
+  
+  .board-column {
+    width: 100%;
+    min-width: 100%;
+    max-height: none; /* Let the window handle scrolling */
+  }
+  
+  .ticket-list {
+    max-height: none;
+    overflow-y: visible;
+  }
+}

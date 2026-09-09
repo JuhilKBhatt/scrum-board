@@ -243,7 +243,7 @@ function App() {
         </Space>
       </Header>
 
-      <Content style={{ padding: '24px', overflowX: 'auto', display: 'flex', gap: '24px', justifyContent: 'center' }}>
+      <Content className="board-wrapper">
         {COLUMNS.map(column => (
           <div 
             key={column} 
