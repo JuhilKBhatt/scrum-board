@@ -206,8 +206,7 @@ function App() {
     // Append 'Z' to treat the naive backend timestamp as UTC explicitly
     const utcDateString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
     const d = new Date(utcDateString);
-    return d.toLocaleString('en-AU', { 
-      timeZone: 'Australia/Sydney',
+    return d.toLocaleString(undefined, { 
       month: 'short', 
       day: 'numeric', 
       hour: '2-digit', 
