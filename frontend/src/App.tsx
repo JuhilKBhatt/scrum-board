@@ -48,6 +48,9 @@ function App() {
       handleLogout();
       throw new Error("Unauthorized");
     }
+    if (!res.ok) {
+      throw new Error(`API Error: ${res.statusText}`);
+    }
     return res;
   };
 
